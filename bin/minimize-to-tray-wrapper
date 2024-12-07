@@ -1,0 +1,12 @@
+#!/bin/bash
+
+SELFPATH="$( cd -- $(dirname "$0") > /dev/null; pwd -P)"
+TOPPATH="$( cd -- $(dirname "$0")/.. >/dev/null 2>&1 ; pwd -P )"
+
+if [ -e "${TOPPATH}/venv" ]; then
+    PYTHON="${TOPPATH}/venv/bin/python3"
+else
+    PYTHON="python3"
+fi
+
+MTTW_CONFIG="${SELFPATH}/minimize-to-tray-wrapper.conf" PYTHONPATH="${TOPPATH}/src" exec "$PYTHON" "${TOPPATH}/src/minimize-to-tray-wrapper-launch.py" "$@"
