@@ -26,16 +26,15 @@ from Xlib import display #, X
 #from Xlib.protocol import event
 
 class AppIndicatorWrapper:
-    def __init__(self, cmd, name=None, icon=None, persist_on_exit=False):
+    def __init__(self, cmd, name=None, icon=None, persist_on_exit=False, wm_class=None):
         self.cmd = cmd
         self.icon = icon
+        self.wm_class = wm_class
         if name:
             self.name = name
         else:
             self.name = "program"
 
-        print("HERE:",name)
-            
         self.persist_on_exit = persist_on_exit
         self.indicator = AppIndicator3.Indicator.new(
             "appindicator-wrapper",
@@ -46,15 +45,15 @@ class AppIndicatorWrapper:
 
         # Set icon if provided
         if self.icon:
-            self.indicator.set_icon(self.icon)
+            self.indicator.set_icon_full(self.icon, f"{self.name} icon")
 
         # Create menu
         self.menu = Gtk.Menu()
-        item_show = Gtk.MenuItem(label="Show "+self.name)
+        item_show = Gtk.MenuItem(label="Show " + self.name)
         item_show.connect("activate", self.on_show)
         self.menu.append(item_show)
 
-        item_hide = Gtk.MenuItem(label="Hide "+self.name)
+        item_hide = Gtk.MenuItem(label="Hide " + self.name)
         item_hide.connect("activate", self.on_hide)
         self.menu.append(item_hide)
 
@@ -77,20 +76,16 @@ class AppIndicatorWrapper:
         self.process = subprocess.Popen(self.cmd)
         self.pid = self.process.pid
         time.sleep(2)
-        self.window_id = self.find_window_by_pid(self.pid)
+        self.window_id = self.find_window()
         if self.first_launch and self.window_id:
             self.minimize_window()
         self.first_launch = False
 
-    def monitor_process(self):
-        while True:
-            if self.process.poll() is not None:
-                if not self.persist_on_exit:
-                    Gtk.main_quit()
-                    return
-                else:
-                    self.launch_process()
-            time.sleep(1)
+    def find_window(self):
+        if self.wm_class:
+            return self.find_window_by_class(self.wm_class)
+        else:
+            return self.find_window_by_pid(self.pid)
 
     def find_window_by_pid(self, pid):
         try:
@@ -105,6 +100,19 @@ class AppIndicatorWrapper:
             print(f"Error finding window by pid: {e}")
         return None
 
+    def find_window_by_class(self, wm_class):
+        try:
+            output = subprocess.check_output(["wmctrl", "-lx"], universal_newlines=True)
+            for line in output.splitlines():
+                parts = line.split(None, 5)
+                if len(parts) >= 4:
+                    w_class = parts[2]
+                    if wm_class in w_class:
+                        return int(parts[0], 16)  # Return window ID as int
+        except Exception as e:
+            print(f"Error finding window by class: {e}")
+        return None
+
     def minimize_window(self):
         if self.window_id:
             try:
@@ -112,7 +120,6 @@ class AppIndicatorWrapper:
                 subprocess.run(["xdotool", "windowminimize", str(self.window_id)], check=False)
 
                 # Hide the window further with Xlib
-                #self.set_window_state("_NET_WM_STATE_HIDDEN")
                 self.unmap_window()
             except Exception as e:
                 print(f"Error minimizing window: {e}")
@@ -125,26 +132,6 @@ class AppIndicatorWrapper:
             d.flush()
         except Exception as e:
             print(f"Error unmapping window: {e}")
-
-    # def set_window_state(self, state):
-    #     try:
-    #         d = display.Display()
-    #         root = d.screen().root
-    #         atom = d.intern_atom(state, True)
-    #         window = d.create_resource_object('window', self.window_id)
-    #         net_wm_state = d.intern_atom("_NET_WM_STATE", True)
-    #         message = event.ClientMessage(
-    #             window=window,
-    #             client_type=net_wm_state,
-    #             data=(32, [1, atom, 0, 0, 0])  # 1 for adding the state
-    #         )
-    #         root.send_event(
-    #             window,
-    #             event_mask=X.SubstructureRedirectMask | X.SubstructureNotifyMask
-    #         )
-    #         d.flush()
-    #     except Exception as e:
-    #         print(f"Error setting window state: {e}")
 
     def is_program_running(self):
         return self.process.poll() is None
@@ -173,9 +160,19 @@ class AppIndicatorWrapper:
                 self.process.kill()
             except Exception as e:
                 print(f"Error while terminating process: {e}")
-        
+
         Gtk.main_quit()
 
+    def monitor_process(self):
+        while True:
+            if self.process.poll() is not None:
+                if not self.persist_on_exit:
+                    Gtk.main_quit()
+                    return
+                else:
+                    self.launch_process()
+            time.sleep(5)
+        
 
 def main(args):
 
@@ -187,15 +184,21 @@ def main(args):
     parser = argparse.ArgumentParser(description="AppIndicator with application icon")
     parser.add_argument("--icon", help="Path to PNG icon for the tray")
     parser.add_argument("--app-name", help="Program name")
+    parser.add_argument("--wm-class", help="WM_CLASS of the program window")
     parser.add_argument("--persist-on-exit", action="store_true", help="Restart the program if it quits")
     parser.add_argument("cmd", nargs='+', help="Command to launch the application")
     args = parser.parse_args(args)
 
     GObject.threads_init()
-    app = AppIndicatorWrapper(cmd=args.cmd, name=args.app_name, icon=args.icon, persist_on_exit=args.persist_on_exit)
+    app = AppIndicatorWrapper(
+        cmd=args.cmd,
+        name=args.app_name,
+        icon=args.icon,
+        persist_on_exit=args.persist_on_exit,
+        wm_class=args.wm_class
+    )
     Gtk.main()
 
 
 if __name__ == "__main__":
     main(sys.argv[1:])
-
