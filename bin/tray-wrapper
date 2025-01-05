@@ -9,4 +9,4 @@ else
     PYTHON="python3"
 fi
 
-MTTW_CONFIG="${SELFPATH}/minimize-to-tray-wrapper.conf" PYTHONPATH="${TOPPATH}/src" exec "$PYTHON" "${TOPPATH}/src/minimize-to-tray-wrapper-launch.py" "$@"
+MTTW_CONFIG="${SELFPATH}/minimize-to-tray-wrapper.conf" PYTHONPATH="${TOPPATH}/src" exec "$PYTHON" "${TOPPATH}/src/tray-wrapper-launch.py" "$@"
